@@ -1,60 +1,63 @@
 #!/usr/bin/node
 
-var fs              = require('fs');
-var path            = require('path');
-var imageFetcher    = require('chromecast-image-fetcher');
-var commandLineArgs = require('command-line-args');
-var request         = require('request');
+var fs                 = require('fs');
+var path               = require('path');
+var request            = require('request');
+var imageFetcher       = require('chromecast-image-fetcher');
+var commandLineArgs    = require('command-line-args');
+var ProgressBar        = require('progress');
+var getUsage           = require('command-line-usage');
 
-const optionDefinitions = [
-    { name: 'output-dir', alias: 'o', type: String, defaultOption: './images'},
-    { name: 'remove-previous', alias: 'r', type: Boolean, defaultOption: false}
-];
+var usage              = require('./usage');
+var fileUtils          = require('./fileUtils');
+var optionsDefinitions = require('./options');
 
-const options = commandLineArgs(optionDefinitions);
+var options = commandLineArgs(optionsDefinitions);
 
-var mkdirIfNotExists = function(path, clearIfNotEmpty) {
-    try {
-        fs.mkdirSync(path);
-    } catch(e) {
-        if(e.code == 'EEXIST') {
-            if(clearIfNotEmpty) {
-                fs.rmdirSync(path);
-                fs.mkdirSync(path);
-            }
-        }else{
-            throw e;
-        }
-    }
-};
-
-var download = function(url, outputFolder, done) {
-    const fileName = extractNameFromUrl(url);
-    const fileOutputName = path.join(outputFolder, fileName);
-    request(url).pipe(fs.createWriteStream(fileOutputName)).on('close', function() {
-        console.log('downloaded: ' + fileOutputName);
-        done();
-    });
+if(options.help) {
+    return console.log(getUsage(usage));
+}
+    
+var download = function(url, destinationFolder, done) {
+    const fileOutputName = path.join(destinationFolder, extractNameFromUrl(url));
+    request(url).pipe(fs.createWriteStream(fileOutputName))
+        .on('close', () => done(null, fileOutputName))
+        .on('error', (err) => done(err, null));
 };
 
 var extractNameFromUrl = function(url) {
     var beginIndex = url.lastIndexOf('/');
-    var endIndex = url.length;
-    return url.substr(beginIndex+1, endIndex - beginIndex);
+    return url.substr(beginIndex+1, url.length - beginIndex);
 };
+
 
 imageFetcher.fetchImages(function(err, images) {
     if(err) throw err;
 
-    var outputFolder = options['output-dir'];
+    var outputFolder         = options['output-dir'];
+    var shouldRemovePrevious = options['remove-previous'];
+    
+    console.log('Found ' + images.length + ' new images.');
+    console.log('Output Destination: ' + outputFolder);
+    console.log('Remove Old Images: ' + shouldRemovePrevious);
+    console.log('');
+    var bar = new ProgressBar('Downloading images [:bar] :percent :etas', {total: images.length, incomplete: ' ', width: 20});
+    
     if(!outputFolder.startsWith('/')) {
         outputFolder = path.join(__dirname, outputFolder);
     }
-    
-    mkdirIfNotExists(outputFolder, options['remove-previous']);
-    
-    for(var i = 0; i < images.length; i++) {
-        download(images[i].url, outputFolder, function() {});
+
+    fileUtils.mkdirIfNotExists(outputFolder, shouldRemovePrevious);
+
+    function callback(err, outfileName) {
+        bar.tick();        
+        if(bar.complete) {
+            console.log('\nDone.\n');
+        }
     }
     
+    for(var i = 0; i < images.length; i++) {
+        download(images[i].url, outputFolder, callback);
+    }
+
 });
