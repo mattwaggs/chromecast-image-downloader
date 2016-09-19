@@ -4,7 +4,7 @@
   "description": "A client to download backdrop images used by the chromecast.",
   "main": "index.js",
   "dependencies": {
-    "chromecast-image-fetcher": "^1.0.0",
+    "chromecast-image-fetcher": "git+https://github.com/mattwaggs/chromecast-image-fetcher.git",
     "command-line-args": "^3.0.1",
     "command-line-usage": "^3.0.3",
     "del": "^2.2.2",
